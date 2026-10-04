@@ -1,6 +1,6 @@
 {
   "name": "@microstudio/test",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Test helpers for driving a MicroStudio runtime from node:test or vitest, and the runner behind `microstudio test`.",
   "license": "MIT",
   "repository": {

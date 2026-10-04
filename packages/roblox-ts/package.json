@@ -1,6 +1,6 @@
 {
   "name": "@microstudio/roblox-ts",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Rojo project reading, roblox-ts output mapping, and running the project's own compiler for MicroStudio.",
   "license": "MIT",
   "repository": {
