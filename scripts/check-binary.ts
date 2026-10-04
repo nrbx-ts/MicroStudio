@@ -26,9 +26,12 @@ redistributable on windows, or anything past the c library on linux and macOS.
 // windows. every other dll an import table can name is one the system ships
 const REDISTRIBUTABLE = /^(?:vcruntime|msvcp|msvcr|concrt|vccorlib)\w*\.dll$/i;
 
-// linux: the c library and what gcc puts beside it, and nothing else
+// linux: the c library and what gcc puts beside it, plus the c++ runtime luau is
+// built with. node links libstdc++ as well, so anything that can run the cli
+// already has it; `libstdc++` has no word boundary to anchor on, hence the second
+// arm of this pattern
 const SYSTEM_LIBRARIES =
-  /^(?:libc|libm|libgcc_s|libpthread|libdl|librt|libutil|ld-linux)\b/;
+  /^(?:libc|libm|libgcc_s|libpthread|libdl|librt|libutil|ld-linux)\b|^libstdc\+\+\./;
 
 interface PeHeaders {
   data: Buffer;

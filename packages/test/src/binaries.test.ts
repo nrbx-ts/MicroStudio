@@ -7,6 +7,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -147,10 +148,17 @@ test("each platform's rules name what it cannot assume", () => {
     ["VCRUNTIME140.dll", "MSVCP140.dll"],
   );
 
-  // linux: the c library and what gcc brings, and nothing past it
+  // linux: the c library, what gcc brings, and the c++ runtime luau needs
   assert.deepEqual(
     unexpectedDependencies(
-      ["libc.so.6", "libm.so.6", "libgcc_s.so.1", "libpthread.so.0", "libssl.so.3"],
+      [
+        "libc.so.6",
+        "libm.so.6",
+        "libgcc_s.so.1",
+        "libpthread.so.0",
+        "libstdc++.so.6",
+        "libssl.so.3",
+      ],
       "linux",
     ),
     ["libssl.so.3"],
@@ -339,14 +347,17 @@ test("a staged package survives install and is found by the resolver", async () 
     mkdirSync(join(dir, "node_modules", "@microstudio"), { recursive: true });
     cpSync(packageDir, installed, { recursive: true });
 
-    // the resolver finds it from the consumer's own file
+    // the resolver finds it from the consumer's own file. macOS turns /var into
+    // /private/var and node's resolver returns the real path, so ask the
+    // filesystem rather than comparing the string mkdtemp handed us
+    const resolved = installedPlatformBinary({
+      platform: target.platform,
+      arch: target.arch,
+      from: join(dir, "index.js"),
+    });
     assert.equal(
-      installedPlatformBinary({
-        platform: target.platform,
-        arch: target.arch,
-        from: join(dir, "index.js"),
-      }),
-      join(installed, "bin", target.binary),
+      resolved === undefined ? undefined : realpathSync(resolved),
+      realpathSync(join(installed, "bin", target.binary)),
     );
 
     // npm packs exactly the binary and the manifest

@@ -108,8 +108,10 @@ is meant to avoid. Two things keep that from happening:
   platform (`readelf -d`, `otool -L`, or the PE import table) what the binary
   loads, and fails if that is anything past the c library — the three dlls above
   and their `MSVCP`/`MSVCR` relatives are the deny list on windows, and on linux
-  and macOS anything outside the system libraries is refused. The `binaries` job
-  runs it on each staged binary, and then runs the binary itself.
+  and macOS anything outside the system libraries is refused. Linux allows the
+  c++ runtime as well, because Luau is C++ and Node links `libstdc++` too, so a
+  machine that can run the cli already has it. The `binaries` job runs the check
+  on each staged binary, and then runs the binary itself.
 
 `packages/test/src/binaries.test.ts` runs the same check on the sidecar a
 checkout built, so a new dependency that breaks portability fails on a laptop
