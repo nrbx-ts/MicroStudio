@@ -198,12 +198,22 @@ jobs:
           echo "Publishing as ${publisher}."
       - uses: actions/cache@v4
         with:
+          # downloaded crates are the same whatever image they are unpacked on,
+          # so this one is shared across the platform legs
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target/release
-          key: cargo-release-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-release-v1-${{ runner.os }}-${{ runner.arch }}-
+          key: cargo-registry-v1-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-registry-v1-${{ runner.os }}-
+      - uses: actions/cache@v4
+        with:
+          # built artifacts are not. ubuntu-22.04 and ubuntu-24.04 are both "Linux"
+          # "X64", and a target/ built against one glibc will not link against
+          # another: glibc 2.38 redirects strtol to __isoc23_strtol, which is not a
+          # symbol 22.04's 2.35 has. one entry per platform, never per os
+          path: target/release
+          key: cargo-release-v2-${{ matrix.target }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-release-v2-${{ matrix.target }}-
       - name: Build the release sidecar
         shell: bash
         # lto is on, this can be quiet for a while
