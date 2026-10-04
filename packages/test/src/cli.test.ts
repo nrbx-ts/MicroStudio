@@ -3,8 +3,8 @@ import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 const CLI = fileURLToPath(new URL("../../cli/src/index.ts", import.meta.url));
 
@@ -122,7 +122,7 @@ test("a BOM does not stop a script from running", async () => {
 
 test("prompts when given nothing to run", async () => {
   const result = await run([], "print('from the prompt')\n:quit\n");
-  assert.match(result.stdout, /MicroStudio 0\.1\.0 — Luau \d+\.\d+ — :help for commands/);
+  assert.match(result.stdout, /MicroStudio 1\.0\.0 — Luau \d+\.\d+ — :help for commands/);
   assert.match(result.stdout, /from the prompt/);
   assert.equal(result.code, 0);
 });
