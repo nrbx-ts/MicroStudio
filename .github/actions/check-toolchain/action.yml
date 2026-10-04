@@ -1,0 +1,35 @@
+# version checks in one place, for every job that runs a command from this repo:
+# fail here, naming the version, and not somewhere inside node --test
+#
+# yarn is called through corepack, which runs the release `packageManager` names
+# without a shim of its own, so the pinned release is what runs wherever it is
+# installed. a `yarn` nested in a script resolves to the same one
+
+name: Check the toolchain
+description: Verify Node and the pinned Yarn before anything else runs.
+
+runs:
+  using: composite
+  steps:
+    - name: Check the toolchain
+      shell: bash
+      run: |
+        set -euo pipefail
+        node --version
+        corepack --version
+        node -e '
+          const [major, minor] = process.versions.node.split(".").map(Number);
+          if (major < 22 || (major === 22 && minor < 18)) {
+            console.error(
+              `Node ${process.versions.node} is too old: MicroStudio runs .ts files directly, which needs 22.18 or newer.`
+            );
+            process.exit(1);
+          }
+        '
+        pinned="$(node -p "require('./package.json').packageManager.replace(/^yarn@/, '')")"
+        running="$(corepack yarn --version)"
+        if [ "$pinned" != "$running" ]; then
+          echo "Yarn ${running} is not the pinned ${pinned} (packageManager)." >&2
+          exit 1
+        fi
+        echo "Node $(node --version) with Yarn ${running}."

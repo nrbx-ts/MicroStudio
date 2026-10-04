@@ -1,0 +1,367 @@
+# Release: a vX.Y.Z tag, or a manual run of this workflow.
+#
+# Eleven packages: five names with the code, and six holding a prebuilt sidecar
+# (@microstudio/runtime-<platform>-<arch>, optional deps of the published
+# runtime, so an install keeps the one its machine can run). Nobody installing
+# this needs a rust toolchain: the sidecar is built here, on a runner of each
+# platform, checked for libraries an install cannot provide, and the install job
+# makes sure the result runs. All eleven go up with --provenance, and the publish
+# job checks the attestation landed.
+#
+# The cli publishes twice: @microstudio/cli and, from the same files, the
+# unscoped `microstudio`, so the tool can be installed by its own name. The
+# alias is declared in packages/cli/package.json and both go up together.
+#
+# Order matters: yarn fails on a dependency that does not exist, so the code
+# packages can only go up once all six platform packages are.
+#
+# The only `npm` in this repo. It is the registry client and trusted publishing
+# is its feature (`yarn npm publish` publishes the active workspace, and a
+# release here is a directory of staged packages).
+#
+# First release: publish the eleven by hand, then on npmjs.com add a trusted
+# publisher to each (this repo, workflow file release.yml, no environment).
+# Needs a `release` environment with required reviewers, or a tag publishes as
+# soon as tests pass, and a public repo, or npm will not verify the attestation.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# one release at a time, a second tag waits its turn
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: short
+
+jobs:
+  # version and dist-tag, worked out once for every other job
+  plan:
+    name: Plan the release
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      dist-tag: ${{ steps.release.outputs.dist-tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # the tag check asks git, and a shallow clone has no tags
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Work out what is being released
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          tag="$(git describe --tags --exact-match 2>/dev/null || true)"
+          if [ -z "$tag" ]; then
+            echo "This commit is not tagged: a release is cut from a vX.Y.Z tag." >&2
+            exit 1
+          fi
+          if [ "$tag" != "v${version}" ]; then
+            echo "Tag ${tag} does not match package.json's version ${version}." >&2
+            exit 1
+          fi
+          for dir in packages/*/; do
+            package_version="$(node -p "require('./${dir}package.json').version")"
+            if [ "$package_version" != "$version" ]; then
+              echo "${dir} is ${package_version}, expected ${version}: the packages are released together." >&2
+              exit 1
+            fi
+          done
+          # the sidecar reports this one, so a stale copy of it would ship a
+          # binary that disagrees with the package around it
+          cargo_version="$(node -p 'require("node:fs").readFileSync("Cargo.toml", "utf8").match(/\[workspace\.package\][\s\S]*?version = "([^"]+)"/)?.[1] ?? ""')"
+          if [ "$cargo_version" != "$version" ]; then
+            echo "Cargo.toml is ${cargo_version}, expected ${version}: the workspace version is released too." >&2
+            exit 1
+          fi
+          case "$version" in
+            *-*) dist_tag=next ;;
+            *) dist_tag=latest ;;
+          esac
+          {
+            echo "version=${version}"
+            echo "dist-tag=${dist_tag}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing ${version} as dist-tag ${dist_tag}."
+
+  test:
+    name: Test
+    needs: plan
+    uses: ./.github/workflows/test.yml
+
+  # a human signs off. needs the `release` environment to have reviewers,
+  # without them this job does nothing
+  approve:
+    name: Approve
+    needs: [plan, test]
+    runs-on: ubuntu-24.04
+    environment: release
+    steps:
+      - name: Wait for approval
+        shell: bash
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: echo "Approved to release MicroStudio ${VERSION}."
+
+  # one platform package per platform, each on a runner of that platform, so
+  # nothing is cross-compiled or emulated
+  # pinned images and not -latest, which move: macos -latest is os 26 now,
+  # windows-latest is server 2025. ubuntu-22.04 is the oldest image github hosts,
+  # and the glibc a binary links against is the floor for everyone who installs
+  # it, so the linux sidecars come from the oldest one that still builds. the
+  # -arm labels are the free arm64 runners, public repositories only
+  binaries:
+    name: Build ${{ matrix.target }}
+    needs: [plan, approve]
+    strategy:
+      # one platform failing must not cancel the others mid-publish
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            target: linux-x64
+          - runner: ubuntu-22.04-arm
+            target: linux-arm64
+          - runner: macos-15-intel
+            target: darwin-x64
+          - runner: macos-15
+            target: darwin-arm64
+          - runner: windows-2022
+            target: win32-x64
+          - runner: windows-11-arm
+            target: win32-arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      # trusted publishing: npm trades this oidc token for a publish token and
+      # signs the attestation with it, no NPM_TOKEN anywhere
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: ./.github/actions/check-toolchain
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/release
+          key: cargo-release-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-release-v1-${{ runner.os }}-${{ runner.arch }}-
+      - name: Build the release sidecar
+        shell: bash
+        # lto is on, this can be quiet for a while
+        timeout-minutes: 30
+        run: cargo build --release --bin microstudio-runtime
+      - name: Stage @microstudio/runtime-${{ matrix.target }}
+        shell: bash
+        # plain node: staging has no deps, so this job never installs the
+        # workspace. --binary defaults to target/release/<binary>
+        run: |
+          node scripts/stage-binary.ts stage \
+            --target ${{ matrix.target }} \
+            --version ${{ needs.plan.outputs.version }}
+      - name: Check the staged binary, on this platform
+        shell: bash
+        # the artifact about to be published, asked what it needs and whether it
+        # starts. neither can be fixed by an install afterwards, and the binary
+        # is the one part of a release that a test machine here cannot fake
+        run: |
+          set -euo pipefail
+          binary="$(find "dist/npm/@microstudio/runtime-${{ matrix.target }}/bin" -type f -print -quit)"
+          test -n "${binary}"
+          node scripts/check-binary.ts "${binary}"
+          "${binary}" --version
+      - name: Refuse to overwrite a published version
+        shell: bash
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          package="@microstudio/runtime-${{ matrix.target }}"
+          if npm view "${package}@${VERSION}" version > /dev/null 2>&1; then
+            echo "${package}@${VERSION} is already published." >&2
+            exit 1
+          fi
+      - name: Publish @microstudio/runtime-${{ matrix.target }}
+        shell: bash
+        env:
+          DIST_TAG: ${{ needs.plan.outputs.dist-tag }}
+        run: |
+          set -euo pipefail
+          npm publish "dist/npm/@microstudio/runtime-${{ matrix.target }}" \
+            --access public \
+            --tag "${DIST_TAG}" \
+            --provenance
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sidecar-${{ matrix.target }}
+          path: dist/npm/@microstudio/runtime-${{ matrix.target }}/bin
+          if-no-files-found: error
+
+  publish:
+    name: Publish the code packages
+    needs: [plan, binaries]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: ./.github/actions/check-toolchain
+      - name: Check npm can sign provenance
+        shell: bash
+        # provenance needs npm 11.5.1+, which node 24 ships. fail here and not
+        # halfway through a release
+        run: |
+          set -euo pipefail
+          npm --version
+          node -e '
+            const {execSync} = require("node:child_process");
+            const [major, minor, patch] = execSync("npm --version").toString().trim().split(".").map(Number);
+            if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) {
+              console.error(
+                `npm ${major}.${minor}.${patch} is too old: provenance needs 11.5.1 or newer.`
+              );
+              process.exit(1);
+            }
+          '
+      - name: Require every platform package for this release
+        shell: bash
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          # names come from the target table, not a second list in here
+          packages="$(node --input-type=module -e '
+            const { TARGETS, PLATFORM_PACKAGE_PREFIX } = await import("./packages/runtime/src/targets.ts");
+            console.log(TARGETS.map((target) => `${PLATFORM_PACKAGE_PREFIX}${target.name}`).join(" "));
+          ')"
+          missing=""
+          for package in $packages; do
+            if ! npm view "${package}@${VERSION}" version > /dev/null 2>&1; then
+              missing="${missing} ${package}"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "Not published for ${VERSION}:${missing}" >&2
+            echo "The binaries job publishes all six; re-run it, then re-run this one." >&2
+            exit 1
+          fi
+          echo "Every platform package exists for ${VERSION}."
+      - uses: actions/cache@v4
+        with:
+          path: ~/.yarn/berry/cache
+          key: yarn-v1-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+          restore-keys: yarn-v1-${{ runner.os }}-
+      - name: Install workspace dependencies
+        # tsc and everything the staging script imports come from here
+        run: corepack yarn install --immutable
+      - name: Stage the packages for publishing
+        shell: bash
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          # compiles into dist/npm/<name> with a manifest that points at the
+          # output, and stages the cli again under its alias. the repo itself
+          # keeps "*"
+          node scripts/stage-package.ts stage --all --version "${VERSION}"
+      - name: Refuse to overwrite a published version
+        shell: bash
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          # every name this release publishes, the cli's alias included, from the
+          # manifests rather than a second list in here
+          packages="$(node scripts/stage-package.ts list)"
+          # an empty list would pass every loop below and report a release that
+          # uploaded nothing
+          if [ -z "$packages" ]; then
+            echo "Staging produced no packages to publish." >&2
+            exit 1
+          fi
+          while read -r name _dir; do
+            if npm view "${name}@${VERSION}" version > /dev/null 2>&1; then
+              echo "${name}@${VERSION} is already published." >&2
+              exit 1
+            fi
+          done <<< "$packages"
+      - name: Show what would be published
+        # the staged dirs are what gets uploaded, and npm pack builds that
+        # payload. catches a missing files entry or a test file that would ship.
+        # --dry-run writes nothing
+        shell: bash
+        run: |
+          set -euo pipefail
+          while read -r name dir; do
+            echo "--- ${name} ---"
+            npm pack --dry-run "${dir}"
+          done < <(node scripts/stage-package.ts list)
+      - name: Publish
+        shell: bash
+        env:
+          DIST_TAG: ${{ needs.plan.outputs.dist-tag }}
+        run: |
+          set -euo pipefail
+          # dependency order, which npm does not need: it resolves versions at
+          # install time. each staged manifest pins the others to this version
+          packages="$(node scripts/stage-package.ts list)"
+          if [ -z "$packages" ]; then
+            echo "Staging produced no packages to publish." >&2
+            exit 1
+          fi
+          while read -r name dir; do
+            echo "publishing ${name}"
+            npm publish "${dir}" \
+              --access public \
+              --tag "${DIST_TAG}" \
+              --provenance
+          done <<< "$packages"
+      - name: Verify the release landed, with provenance
+        shell: bash
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          while read -r name _dir; do
+            npm view "${name}@${VERSION}" version
+          done < <(node scripts/stage-package.ts list)
+          platforms="$(node --input-type=module -e '
+            const { TARGETS, PLATFORM_PACKAGE_PREFIX } = await import("./packages/runtime/src/targets.ts");
+            console.log(TARGETS.map((target) => `${PLATFORM_PACKAGE_PREFIX}${target.name}`).join(" "));
+          ')"
+          for package in $platforms; do
+            npm view "${package}@${VERSION}" version
+          done
+          # missing this field prints nothing and still exits 0, so check the value
+          code_packages="$(node scripts/stage-package.ts list | cut -d' ' -f1)"
+          for package in $code_packages $platforms; do
+            predicate="$(npm view "${package}@${VERSION}" dist.attestations.provenance.predicateType)"
+            if [ "$predicate" != "https://slsa.dev/provenance/v1" ]; then
+              echo "${package}@${VERSION} has no provenance attestation (got '${predicate}')." >&2
+              exit 1
+            fi
+            echo "${package}: ${predicate}"
+          done

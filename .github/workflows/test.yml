@@ -1,0 +1,138 @@
+# Test: pushes to master, pull requests, and once per release, since release.yml
+# calls this workflow.
+#
+# Runs the commands the README gives a developer (`yarn check`), plus a release
+# sidecar build in the `node` job: the cli and spec-runner tests spawn a real
+# microstudio-runtime, and the driver prefers the release binary.
+#
+# `install` is the other half of that: on the platforms a prebuilt sidecar is
+# published for, it stages, packs and installs the npm packages and runs the cli
+# out of node_modules, which is what a user does. linux is covered by `node`.
+#
+# cargo fmt --check and clippy are not wired up: both report violations today,
+# and a flow that is red on arrival gets ignored
+
+name: Test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: short
+
+jobs:
+  rust:
+    name: Rust crates
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: ./.github/actions/check-toolchain
+      # crate downloads and the debug build. the costly part of a cold build is
+      # the vendored luau revision, which is what this saves
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/debug
+          key: cargo-debug-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-debug-v1-${{ runner.os }}-${{ runner.arch }}-
+      - uses: actions/cache@v4
+        with:
+          path: ~/.yarn/berry/cache
+          key: yarn-v1-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+          restore-keys: yarn-v1-${{ runner.os }}-
+      - name: Install workspace dependencies
+        # --immutable refuses a lockfile that does not match the manifests,
+        # which is what npm ci used to do here
+        run: corepack yarn install --immutable
+      - name: cargo test
+        run: corepack yarn test:rust
+        timeout-minutes: 20
+
+  node:
+    name: TypeScript layer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: ./.github/actions/check-toolchain
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/release
+          key: cargo-release-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-release-v1-${{ runner.os }}-${{ runner.arch }}-
+      - uses: actions/cache@v4
+        with:
+          path: ~/.yarn/berry/cache
+          key: yarn-v1-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+          restore-keys: yarn-v1-${{ runner.os }}-
+      - name: Build the release sidecar
+        # lto is on, this can be quiet for a while
+        run: cargo build --release --bin microstudio-runtime
+        timeout-minutes: 30
+      - name: Install workspace dependencies
+        run: corepack yarn install --immutable
+      - name: Typecheck
+        run: corepack yarn typecheck
+      - name: node --test
+        run: corepack yarn test:ts
+
+  # what a user does: install the npm packages, run the cli out of node_modules.
+  # the sidecar is this checkout's build, and a release runs the same tests against
+  # the binaries it built, so a package that only works on the builder's machine
+  # fails here instead of on someone else's
+  install:
+    name: Install and run (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # one platform failing should still show what the others did
+      fail-fast: false
+      matrix:
+        os: [windows-2022, macos-15]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: ./.github/actions/check-toolchain
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/release
+          key: cargo-release-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-release-v1-${{ runner.os }}-${{ runner.arch }}-
+      - uses: actions/cache@v4
+        with:
+          path: ~/.yarn/berry/cache
+          key: yarn-v1-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+          restore-keys: yarn-v1-${{ runner.os }}-
+      - name: Build the release sidecar
+        # the tests stage this as the platform package, so it is what gets installed
+        run: cargo build --release --bin microstudio-runtime
+        timeout-minutes: 30
+      - name: Install workspace dependencies
+        run: corepack yarn install --immutable
+      - name: Stage, pack, install, run
+        run: node --test packages/test/src/packaging.test.ts packages/test/src/binaries.test.ts
+        timeout-minutes: 20

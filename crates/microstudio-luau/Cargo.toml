@@ -1,0 +1,19 @@
+[package]
+name = "microstudio-luau"
+description = "The MicroStudio Luau VM: bindings, scheduler and script loader."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+microstudio-types = { workspace = true }
+microstudio-datamodel = { workspace = true }
+microstudio-services = { workspace = true }
+mlua = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+# http for HttpService: default features are rustls plus bundled roots, so no system openssl
+ureq = { version = "3", default-features = false, features = ["rustls", "gzip"] }

@@ -1,0 +1,31 @@
+{
+  "name": "@microstudio/test",
+  "version": "0.1.0",
+  "description": "Test helpers for driving a MicroStudio runtime from node:test or vitest, and the runner behind `microstudio test`.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nrbx-ts/microstudio.git",
+    "directory": "packages/test"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types/globals": "./types/globals.d.ts"
+  },
+  "types": "./src/index.ts",
+  "files": [
+    "src",
+    "types",
+    "!src/**/*.test.ts"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "dependencies": {
+    "@microstudio/runtime": "*"
+  },
+  "devDependencies": {
+    "@microstudio/roblox-ts": "*"
+  }
+}

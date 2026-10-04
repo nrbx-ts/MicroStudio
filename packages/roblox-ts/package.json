@@ -1,0 +1,25 @@
+{
+  "name": "@microstudio/roblox-ts",
+  "version": "0.1.0",
+  "description": "Rojo project reading, roblox-ts output mapping, and running the project's own compiler for MicroStudio.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nrbx-ts/microstudio.git",
+    "directory": "packages/roblox-ts"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "dependencies": {
+    "@microstudio/runtime": "*"
+  }
+}

@@ -1,0 +1,26 @@
+[package]
+name = "microstudio-runtime"
+description = "MicroStudio's headless runtime core and stdio JSON-RPC sidecar."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "microstudio_runtime"
+path = "src/lib.rs"
+
+[[bin]]
+name = "microstudio-runtime"
+path = "src/main.rs"
+
+[dependencies]
+microstudio-types = { workspace = true }
+microstudio-datamodel = { workspace = true }
+microstudio-services = { workspace = true }
+microstudio-luau = { workspace = true }
+mlua = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

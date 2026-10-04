@@ -1,0 +1,37 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/microstudio-types",
+    "crates/microstudio-datamodel",
+    "crates/microstudio-services",
+    "crates/microstudio-luau",
+    "crates/microstudio-runtime",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+license = "MIT"
+repository = "https://github.com/microstudio/microstudio"
+authors = ["MicroStudio contributors"]
+
+[workspace.dependencies]
+microstudio-types = { path = "crates/microstudio-types" }
+microstudio-datamodel = { path = "crates/microstudio-datamodel" }
+microstudio-services = { path = "crates/microstudio-services" }
+microstudio-luau = { path = "crates/microstudio-luau" }
+microstudio-runtime = { path = "crates/microstudio-runtime" }
+
+# vendored luau builds the pinned revision from source, no system lua needed
+# serialize is the json-rpc boundary to the ts driver
+mlua = { version = "0.12.2", features = ["luau", "vendored", "serialize", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+slab = "0.4"
+thiserror = "2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

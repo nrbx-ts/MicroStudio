@@ -1,0 +1,22 @@
+{
+  "name": "@microstudio/runtime",
+  "version": "0.1.0",
+  "description": "TypeScript driver for the MicroStudio headless Roblox runtime.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nrbx-ts/microstudio.git",
+    "directory": "packages/runtime"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  }
+}

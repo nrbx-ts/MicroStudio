@@ -1,0 +1,11 @@
+# the sidecar ships as a prebuilt binary, so it cannot ask for a runtime the
+# machine may not have: a static CRT takes the visual c++ redistributable off the
+# list of things an install needs on windows
+#
+# RUSTFLAGS in the environment replaces this whole table, so nothing sets it
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

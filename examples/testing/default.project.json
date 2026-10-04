@@ -1,0 +1,9 @@
+{
+  "name": "testing",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$path": "src"
+    }
+  }
+}

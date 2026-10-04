@@ -1,0 +1,33 @@
+{
+  "name": "@microstudio/cli",
+  "version": "0.1.0",
+  "description": "The MicroStudio command line: dev, test and repl.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nrbx-ts/microstudio.git",
+    "directory": "packages/cli"
+  },
+  "publishAliases": [
+    "microstudio"
+  ],
+  "type": "module",
+  "bin": {
+    "microstudio": "./src/index.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "dependencies": {
+    "@microstudio/roblox-ts": "*",
+    "@microstudio/runtime": "*",
+    "@microstudio/test": "*"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "hello",
+  "tree": {
+    "$className": "DataModel",
+    "ServerScriptService": {
+      "TS": { "$path": "out/server" }
+    },
+    "ReplicatedStorage": {
+      "TS": { "$path": "out/shared" }
+    }
+  }
+}
