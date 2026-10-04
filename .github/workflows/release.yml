@@ -1,5 +1,10 @@
 # Release: a vX.Y.Z tag, or a manual run of this workflow.
 #
+# setup-node's automatic package-manager cache is off in every job here: it looks
+# for a cache directory by running the system yarn, which is 1.22 and refuses to
+# run in a project whose packageManager names yarn 4.18.1. the yarn cache is
+# cached with actions/cache instead, keyed on the lockfile
+#
 # Eleven packages: five names with the code, and six holding a prebuilt sidecar
 # (@microstudio/runtime-<platform>-<arch>, optional deps of the published
 # runtime, so an install keeps the one its machine can run). Nobody installing
@@ -15,12 +20,18 @@
 # Order matters: yarn fails on a dependency that does not exist, so the code
 # packages can only go up once all six platform packages are.
 #
-# The only `npm` in this repo. It is the registry client and trusted publishing
-# is its feature (`yarn npm publish` publishes the active workspace, and a
-# release here is a directory of staged packages).
+# Publishing authenticates with the NPM_PUBLISH repository secret: a granular npm
+# token with publish rights and 2FA bypass, which can create a package that does
+# not exist yet, so the first release needs no manual step. `id-token: write` is a
+# separate thing — that is the token npm signs the provenance attestation with.
 #
-# First release: publish the eleven by hand, then on npmjs.com add a trusted
-# publisher to each (this repo, workflow file release.yml, no environment).
+# npm gives a configured trusted publisher precedence over the secret, so adding
+# one on npmjs.com per package (this repository, workflow release.yml, no
+# environment) is an incremental migration, and the secret goes once all eleven
+# have one. Do it before January 2027: from then npm rejects a direct publish from
+# a 2FA-bypass token, and the alternative is a stage-only token with a person
+# approving every staged package.
+#
 # Needs a `release` environment with required reviewers, or a tag publishes as
 # soon as tests pass, and a public repo, or npm will not verify the attestation.
 
@@ -59,6 +70,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          # it would run the system yarn, which cannot run here: see the header
+          package-manager-cache: false
       - name: Work out what is being released
         id: release
         shell: bash
@@ -122,8 +135,11 @@ jobs:
   # pinned images and not -latest, which move: macos -latest is os 26 now,
   # windows-latest is server 2025. ubuntu-22.04 is the oldest image github hosts,
   # and the glibc a binary links against is the floor for everyone who installs
-  # it, so the linux sidecars come from the oldest one that still builds. the
-  # -arm labels are the free arm64 runners, public repositories only
+  # it, so the linux sidecars come from the oldest one that still builds. it is
+  # deprecated from september 2026 and removed in april 2027, so this matrix has
+  # to move by then: to the newest image plus a musl sidecar, or a container
+  # pinned to an old glibc. the -arm labels are the free arm64 runners, public
+  # repositories only
   binaries:
     name: Build ${{ matrix.target }}
     needs: [plan, approve]
@@ -147,8 +163,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
-      # trusted publishing: npm trades this oidc token for a publish token and
-      # signs the attestation with it, no NPM_TOKEN anywhere
+      # the attestation is signed with this oidc token; the publish itself
+      # authenticates with NPM_PUBLISH
       id-token: write
     steps:
       - uses: actions/checkout@v5
@@ -156,7 +172,30 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          # it would run the system yarn, which cannot run here: see the header
+          package-manager-cache: false
+          # writes the .npmrc that reads the token out of NODE_AUTH_TOKEN, so
+          # no secret is ever written to a file
+          registry-url: https://registry.npmjs.org
       - uses: ./.github/actions/check-toolchain
+      - name: Check the publish token
+        shell: bash
+        # fails in seconds rather than after a release build, and names the secret
+        # to fix instead of leaving npm's 401 to be read
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "NPM_PUBLISH is empty. It has to be a repository secret, or one in" >&2
+            echo "an environment this job names." >&2
+            exit 1
+          fi
+          if ! publisher="$(npm whoami 2>&1)"; then
+            echo "NPM_PUBLISH does not authenticate: ${publisher}" >&2
+            exit 1
+          fi
+          echo "Publishing as ${publisher}."
       - uses: actions/cache@v4
         with:
           path: |
@@ -204,6 +243,8 @@ jobs:
         shell: bash
         env:
           DIST_TAG: ${{ needs.plan.outputs.dist-tag }}
+          # the .npmrc setup-node wrote reads this, so the secret stays in env
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH }}
         run: |
           set -euo pipefail
           npm publish "dist/npm/@microstudio/runtime-${{ matrix.target }}" \
@@ -222,17 +263,42 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+      # the attestation is signed with this oidc token; the publish itself
+      # authenticates with NPM_PUBLISH
       id-token: write
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          # it would run the system yarn, which cannot run here: see the header
+          package-manager-cache: false
+          # writes the .npmrc that reads the token out of NODE_AUTH_TOKEN, so
+          # no secret is ever written to a file
+          registry-url: https://registry.npmjs.org
       - uses: ./.github/actions/check-toolchain
+      - name: Check the publish token
+        shell: bash
+        # fails before the staging work, and names the secret to fix instead of
+        # leaving npm's 401 to be read
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "NPM_PUBLISH is empty. It has to be a repository secret, or one in" >&2
+            echo "an environment this job names." >&2
+            exit 1
+          fi
+          if ! publisher="$(npm whoami 2>&1)"; then
+            echo "NPM_PUBLISH does not authenticate: ${publisher}" >&2
+            exit 1
+          fi
+          echo "Publishing as ${publisher}."
       - name: Check npm can sign provenance
         shell: bash
-        # provenance needs npm 11.5.1+, which node 24 ships. fail here and not
-        # halfway through a release
+        # the attestation needs npm 11.5.1+ and the oidc token the job asks for;
+        # node 24 ships that npm. fail here and not halfway through a release
         run: |
           set -euo pipefail
           npm --version
@@ -323,6 +389,8 @@ jobs:
         shell: bash
         env:
           DIST_TAG: ${{ needs.plan.outputs.dist-tag }}
+          # the .npmrc setup-node wrote reads this, so the secret stays in env
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH }}
         run: |
           set -euo pipefail
           # dependency order, which npm does not need: it resolves versions at

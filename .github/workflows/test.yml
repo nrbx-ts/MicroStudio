@@ -9,6 +9,11 @@
 # published for, it stages, packs and installs the npm packages and runs the cli
 # out of node_modules, which is what a user does. linux is covered by `node`.
 #
+# setup-node's automatic package-manager cache is off in every job here: it looks
+# for a cache directory by running the system yarn, which is 1.22 and refuses to
+# run in a project whose packageManager names yarn 4.18.1. the yarn cache is
+# cached with actions/cache instead, keyed on the lockfile
+#
 # cargo fmt --check and clippy are not wired up: both report violations today,
 # and a flow that is red on arrival gets ignored
 
@@ -37,6 +42,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          # it would run the system yarn, which cannot run here: see the header
+          package-manager-cache: false
       - uses: ./.github/actions/check-toolchain
       # crate downloads and the debug build. the costly part of a cold build is
       # the vendored luau revision, which is what this saves
@@ -70,6 +77,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          # it would run the system yarn, which cannot run here: see the header
+          package-manager-cache: false
       - uses: ./.github/actions/check-toolchain
       - uses: actions/cache@v4
         with:
@@ -113,6 +122,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          # it would run the system yarn, which cannot run here: see the header
+          package-manager-cache: false
       - uses: ./.github/actions/check-toolchain
       - uses: actions/cache@v4
         with:

@@ -150,6 +150,17 @@ test("stage compiles every publishable package to JavaScript", () => {
     );
     // src/ is what a checkout runs, not what the registry gets
     assert.equal(existsSync(join(staged(name), "src")), false);
+    // the readme npm shows on the package page, and the licence it is under
+    assert.equal(
+      existsSync(join(staged(name), "README.md")),
+      true,
+      `${name} staged no readme`,
+    );
+    assert.equal(
+      existsSync(join(staged(name), "LICENSE")),
+      true,
+      `${name} staged no licence`,
+    );
   }
 });
 
@@ -325,6 +336,9 @@ test("npm packs the compiled output and no tests", async () => {
       paths.includes("dist/index.js"),
       `${name} packs no compiled entry point`,
     );
+    // npm includes these whatever `files` says, but only if staging copied them
+    assert.ok(paths.includes("README.md"), `${name} packs no readme`);
+    assert.ok(paths.includes("LICENSE"), `${name} packs no licence`);
     for (const path of paths) {
       assert.equal(
         path.includes(".test."),
@@ -506,6 +520,9 @@ test("the cli publishes under its own name as well as the scoped one", async () 
 
   const files = readdirSync(alias, { recursive: true, encoding: "utf8" });
   assert.ok(files.includes(join("dist", "index.js")), "the alias has no entry point");
+  // the readme and licence come across with the files, so the alias has a page
+  assert.ok(files.includes("README.md"), "the alias has no readme");
+  assert.ok(files.includes("LICENSE"), "the alias has no licence");
   assert.deepEqual(
     files.filter((file) => file.endsWith(".ts") && !file.endsWith(".d.ts")),
     [],

@@ -362,7 +362,12 @@ test("a staged package survives install and is found by the resolver", async () 
     assert.equal(entries[0]?.version, "1.2.3");
     assert.deepEqual(
       entries[0]?.files.map((file) => file.path).sort(),
-      ["package.json", join("bin", target.binary).replaceAll("\\", "/")].sort(),
+      [
+        "package.json",
+        "README.md",
+        "LICENSE",
+        join("bin", target.binary).replaceAll("\\", "/"),
+      ].sort(),
     );
   });
 });

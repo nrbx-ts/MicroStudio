@@ -3,7 +3,14 @@
 // at it: a checkout runs .ts, node will not strip types under node_modules, so
 // only what is published has to be javascript
 
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
@@ -118,6 +125,14 @@ function stagePackage(
   const types = join(packageDir, "types");
   if (existsSync(types)) {
     cpSync(types, join(staged, "types"), { recursive: true });
+  }
+  // the package's own readme, and the licence it is published under. npm shows
+  // the first on the package page, so it has to travel with the files
+  for (const file of ["README.md", "LICENSE"] as const) {
+    const source = file === "LICENSE" ? join(repoRoot, file) : join(packageDir, file);
+    if (existsSync(source)) {
+      copyFileSync(source, join(staged, file));
+    }
   }
 
   writeManifest(

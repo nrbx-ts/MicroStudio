@@ -7,6 +7,7 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -92,6 +93,39 @@ function main(argv: readonly string[]): number {
   copyFileSync(binary, staged);
   // npm packs the mode it finds, so keep it executable (no-op on windows)
   chmodSync(staged, 0o755);
+  // every published package carries the licence it is under, this one included
+  const licence = join(repoRoot, "LICENSE");
+  if (existsSync(licence)) {
+    copyFileSync(licence, join(packageDir, "LICENSE"));
+  }
+
+  // generated, so nobody lands on an empty package page. this one is installed
+  // by the runtime package, never by hand
+  writeFileSync(
+    join(packageDir, "README.md"),
+    [
+      `# ${packageName}`,
+      "",
+      `> The prebuilt MicroStudio runtime sidecar for ${target.platform} ${target.arch}.`,
+      "",
+      "Nothing depends on this directly:",
+      "[`@microstudio/runtime`](https://www.npmjs.com/package/@microstudio/runtime)",
+      "lists a sidecar for every platform as an optional dependency, and npm installs",
+      "the one that matches the machine. This package holds that binary and nothing",
+      "else.",
+      "",
+      `| | |`,
+      "| --- | --- |",
+      `| platform | \`${target.platform}\` \`${target.arch}\` |`,
+      `| target | \`${target.triple}\` |`,
+      `| binary | \`bin/${target.binary}\` |`,
+      "",
+      "## License",
+      "",
+      "MIT",
+      "",
+    ].join("\n"),
+  );
 
   console.log(`${packageName}@${version}`);
   console.log(`  binary: ${binary}`);

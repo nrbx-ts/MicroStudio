@@ -1,6 +1,16 @@
-# MicroStudio
+<div align="center" id="top">
+    <img src="https://r2.nrbx.nn140.uk/img/NRBX-Banner.png" alt="NRBX logo" width="1000"/>
+    <br />
+    <br />
+    <img src="https://img.shields.io/badge/Stripe-Donate%20to%20support%20NN140.UK-1b1b1b?style=for-the-badge&labelColor=6860ff&logo=stripe&logoColor=ffffff&logoSize=auto&link=https%3A%2F%2Fdonate.stripe.com%2F9B6eVdbTd4n1a6H1yXa3u04&link=https%3A%2F%2Fdonate.stripe.com%2F9B6eVdbTd4n1a6H1yXa3u04" alt="Badge">
+    <img src="https://img.shields.io/badge/Stripe-Donate%20to%20Support%20NN140.UK%20(RECURRING)-1b1b1b?style=for-the-badge&labelColor=6860ff&logo=stripe&logoColor=ffffff&logoSize=auto&link=https%3A%2F%2Fdonate.stripe.com%2FdRm9ATe1laLpgv5b9xa3u05&link=https%3A%2F%2Fdonate.stripe.com%2FdRm9ATe1laLpgv5b9xa3u05" alt="Badge">
+</div>
 
-A local, headless Roblox development runtime.
+<hr />
+
+## MicroStudio
+
+> A local, headless Roblox development runtime.
 
 MicroStudio runs Roblox Luau on your machine, without Roblox Studio and without
 the Roblox client. It works two ways:
@@ -22,48 +32,10 @@ src/*.ts  --rbxtsc-->  out/*.luau  --Rojo-->  DataModel  --MicroStudio-->  your 
 Nothing is emulated, stubbed or mocked away: a real Luau VM executes the real
 compiled output, and the runtime is deterministic enough to assert on.
 
-## Status
-
-This is the **phase 1 vertical slice**: the runtime boots, loads Luau, runs a
-project's server scripts against a live DataModel, and stands on its own as an
-interpreter with the Roblox API available. What works today:
-
-- A real Luau VM ([mlua], Luau 0.740, built from source — no system Lua needed).
-- Instances, properties, attributes, `Instance.new`, `:FindFirstChild`,
-  `:GetChildren`, `:GetDescendants`, `:IsA`, `:Destroy`, parent events.
-- Signals with `:Connect`, `:Once`, `:Wait`, `:Disconnect`, firing
-  synchronously, in connection order.
-- The deterministic scheduler: `task.spawn` / `defer` / `delay` / `wait` /
-  `cancel`, timers driven by a virtual clock.
-- **Every Roblox service**: `game:GetService("TweenService")` returns an
-  instance rather than erroring. Services with local behaviour (Players,
-  RunService, CollectionService, HttpService, DataStoreService,
-  MemoryStoreService, MessagingService, TweenService, PhysicsService,
-  ContentProvider, LogService, BadgeService, MarketplaceService, UserService,
-  GroupService, InsertService, TeleportService) keep real state; the rest
-  answer with a fixed value for their declared type and warn once per member.
-  See [docs/services.md](docs/services.md).
-- Datatypes: `Vector2`, `Vector3`, `CFrame`, `Color3`, `BrickColor`, `UDim`,
-  `UDim2`, `Rect`, `Ray`, `Enum`.
-- Rojo project reading (`default.project.json`, `$path`, `$className`,
-  `$properties`, `$ignoreUnknownInstances`, `globIgnorePaths`, `init.luau`).
-- A JSON-RPC sidecar and a typed TypeScript driver, CLI and test helpers.
-- A standalone interpreter: `microstudio <file.luau>`, `-e "<code>"`, `-` for
-  stdin, or no arguments for a prompt with the Roblox API already in scope.
-- A continuous session: `dev` runs your project's scripts until you stop it,
-  `dev --interactive` attaches a Luau prompt to that same live world, and
-  `dev --watch` restarts it when a mount changes.
-- A test framework: `microstudio test` runs `*.spec.luau` files, with
-  `describe`/`it`/`expect`, hooks, per-test timeouts and `--isolate` — assertions
-  written in the same language as the code, against a real world. In a roblox-ts
-  project the specs can be `*.spec.ts`: they are compiled with the project's own
-  `rbxtsc`, then run and reported under the `.ts` path.
-
-Not there yet — see [docs/compatibility.md](docs/compatibility.md) for the full
-list: client/UI, physics, `RemoteEvent`/replication, streaming, `Changed`
-signals, actors and parallel Luau.
-
 ## Requirements
+
+An installed MicroStudio needs Node, and nothing else. Building this repository
+needs Rust as well:
 
 | Tool | Version | Notes |
 | --- | --- | --- |
@@ -74,6 +46,9 @@ signals, actors and parallel Luau.
 | Roblox Studio | none | that is the point |
 
 ## Quickstart
+
+Using MicroStudio needs nothing but Node — [the install below](#installing-it-with-no-toolchain).
+Working on MicroStudio itself needs Rust and Node, and nothing else:
 
 ```bash
 git clone <this repo> && cd MicroStudio
@@ -368,7 +343,7 @@ Compile with roblox-ts as usual, then point MicroStudio at the project:
 
 ```bash
 npx rbxtsc
-node packages/cli/src/index.ts dev . --project default.project.json
+npx microstudio dev . --project default.project.json   # or a checkout: node packages/cli/src/index.ts
 ```
 
 Note the nested `TS` folder — MicroStudio reads it from the project file rather
@@ -457,7 +432,12 @@ compiled spec can and cannot do.
 
 **From TypeScript**, when the test itself is a TypeScript test: `luaTest` runs a
 Luau snippet as one test, `runSuite` runs a whole spec from a string, and
-`withRuntime` drives a runtime by hand:
+`withRuntime` drives a runtime by hand. These come from `@microstudio/test`, which
+brings the sidecar with it:
+
+```bash
+npm install --save-dev @microstudio/test     # or: microstudio, for the cli as well
+```
 
 ```ts
 import { test } from "node:test";
@@ -494,6 +474,7 @@ raised.
 ## Repository layout
 
 ```
+.cargo/                  windows builds link the c++ runtime statically
 crates/
   microstudio-types/      Roblox datatypes (Vector3, CFrame, Color3, ...)
   microstudio-datamodel/  Instance tree, signals, attributes, class table
@@ -505,7 +486,8 @@ packages/
   roblox-ts/             Rojo reading and roblox-ts output mapping
   cli/                   `dev`, `test`, `repl`
   test/                  the test framework, runtime helpers, acceptance tests
-scripts/                 staging the publishable packages, and the manifest rules
+scripts/                 staging the publishable packages, the manifest rules,
+                         and the dependency check a shipped binary has to pass
 .github/workflows/       `test` on every push, `release` from a tag
 examples/hello/          a runnable project
 examples/testing/        a project with a spec, for `microstudio test`
@@ -530,12 +512,13 @@ spellings below those), then the **prebuilt binary package** for this platform.
 A published install has no `target/`, so it uses the last of those and never
 needs Rust; a machine with both uses its own build.
 
-Binary packages are published per platform —
-`@microstudio/runtime-linux-x64`, `@microstudio/runtime-win32-x64` and so on — and
-the *published* `@microstudio/runtime` lists all six as optional dependencies,
-so an install keeps only the one that matches its machine. Each one is static
-against its platform's c++ runtime, so an install never has to fetch a
-redistributable either.
+Binary packages are published per platform — linux x64 and arm64, macOS Intel and
+Apple silicon, and Windows x64 and arm64 (`@microstudio/runtime-linux-x64`,
+`@microstudio/runtime-win32-x64`, …). The *published* `@microstudio/runtime`
+lists all six as optional dependencies, so an install keeps only the one that
+matches its machine. Each is static against its platform's c++ runtime, so an
+install never has to fetch a redistributable either, and the release reads every
+binary's dependency table before it publishes it.
 [docs/publishing.md](docs/publishing.md) covers the mechanism; `yarn
 stage:binary stage --target <name>` builds one locally.
 
@@ -561,45 +544,29 @@ yarn test:ts         # 135 tests, including the CLI and the spec runner as child
 yarn typecheck       # tsc --noEmit, strict
 ```
 
-## Continuous integration
+## Releasing
 
-Two GitHub Actions workflows.
+Two workflows in [.github/workflows/](.github/workflows): `test` on every push and
+pull request — Rust on linux, the TypeScript layer on linux, and an `install` job
+on Windows and macOS that packs the packages, `npm install`s them and runs the cli
+out of `node_modules` — and `release` from a `vX.Y.Z` tag, which re-runs the tests,
+waits for a human to approve the `release` environment, builds the six platform
+packages (each one checked for libraries an install cannot provide, and run), and
+publishes all eleven with `npm publish --provenance`.
 
-**`test`**
-([.github/workflows/test.yml](.github/workflows/test.yml)) runs on every push to
-`master` and every pull request, as three jobs in parallel:
+Publishing authenticates with the `NPM_PUBLISH` repository secret. A trusted
+publisher on npmjs.com takes precedence over that secret, so moving to OIDC is
+incremental and worth doing before January 2027, when npm stops accepting a direct
+publish from a 2FA-bypass token.
+[docs/publishing.md](docs/publishing.md) has the rest, and the comment at the top
+of `release.yml` lists the setup steps.
 
-| Job | What it does |
-| --- | --- |
-| `rust` | `yarn install --immutable`, `yarn test:rust` |
-| `node` | `cargo build --release --bin microstudio-runtime`, `yarn install --immutable`, `yarn typecheck`, `yarn test:ts` |
-| `install` | on Windows and macOS: stage, pack, `npm install` and run the cli out of `node_modules` |
+<hr />
 
-The three run on `ubuntu-24.04` — plus `windows-2022` and `macos-15` for
-`install` — with Rust 1.99.0 and Node 24 pinned, cache cargo and Yarn, and check
-Node against `engines.node` and Yarn against `packageManager` before anything
-else runs, through corepack, so nothing is installed globally. The release
-sidecar is built first in the `node` job because the CLI and spec-runner tests
-spawn a real `microstudio-runtime` process, and `install` packs the packages and
-installs them the way a user does, so a release cannot work only on the machine
-that built it.
-
-**`release`**
-([.github/workflows/release.yml](.github/workflows/release.yml)) is cut from a
-`vX.Y.Z` tag, or run by hand. It re-runs the tests, waits for a human to approve
-the protected `release` environment, builds all six platform packages — each on
-a runner of its own platform, and each one asked what it loads and whether it
-starts — and then publishes the code packages, the cli under both its names,
-once every platform package is up. All eleven are published with
-`npm publish --provenance`, and the last step checks that each one carries an
-attestation.
-
-The comment at the top of `release.yml` has the setup steps (trusted publishers
-on npm, a protected environment, a public repository), and
-[docs/publishing.md](docs/publishing.md) explains the packages themselves.
-
-`cargo fmt --check` and `cargo clippy` are deliberately not wired up yet: both
-report violations today, and a pipeline that is red on arrival teaches people to
-ignore it.
-
-[mlua]: https://github.com/mlua-rs/mlua
+<div align="center" id="top">
+    <img src="https://img.shields.io/badge/Stripe-Donate%20to%20support%20NN140.UK-1b1b1b?style=for-the-badge&labelColor=6860ff&logo=stripe&logoColor=ffffff&logoSize=auto&link=https%3A%2F%2Fdonate.stripe.com%2F9B6eVdbTd4n1a6H1yXa3u04&link=https%3A%2F%2Fdonate.stripe.com%2F9B6eVdbTd4n1a6H1yXa3u04" alt="Badge">
+    <img src="https://img.shields.io/badge/Stripe-Donate%20to%20Support%20NN140.UK%20(RECURRING)-1b1b1b?style=for-the-badge&labelColor=6860ff&logo=stripe&logoColor=ffffff&logoSize=auto&link=https%3A%2F%2Fdonate.stripe.com%2FdRm9ATe1laLpgv5b9xa3u05&link=https%3A%2F%2Fdonate.stripe.com%2FdRm9ATe1laLpgv5b9xa3u05" alt="Badge">
+    <br />
+    <br />
+    <img src="https://r2.nrbx.nn140.uk/img/NRBX-Banner.png" alt="NRBX logo" width="1000"/>
+</div>

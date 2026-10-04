@@ -127,8 +127,8 @@ Two scripts fill `dist/npm/` (gitignored), one for each kind of package:
 
 | Script | Writes | Does |
 | --- | --- | --- |
-| `scripts/stage-binary.ts` | `dist/npm/@microstudio/runtime-<platform>-<arch>` | copies the sidecar into `bin/`, writes the `os`/`cpu` manifest |
-| `scripts/stage-package.ts` | `dist/npm/<name>` | compiles the package with `tsc`, copies its assets, writes the publish manifest, and stages a copy under each alias |
+| `scripts/stage-binary.ts` | `dist/npm/@microstudio/runtime-<platform>-<arch>` | copies the sidecar into `bin/`, writes the `os`/`cpu` manifest and a generated readme |
+| `scripts/stage-package.ts` | `dist/npm/<name>` | compiles the package with `tsc`, copies its assets, readme and licence, writes the publish manifest, and stages a copy under each alias |
 
 ```bash
 cargo build --release --bin microstudio-runtime
@@ -141,7 +141,8 @@ npm publish dist/npm/@microstudio/runtime           --access public   # and the 
 
 `stage-package.ts` is the one that has to think: it runs `tsc` over
 `packages/<name>/src` into `<staged>/dist`, copies the assets that are not
-TypeScript (`src/luau/`, `types/`), and rewrites the manifest so `exports`,
+TypeScript (`src/luau/`, `types/`), copies the package's `README.md` and the
+repository's `LICENSE` beside them, and rewrites the manifest so `exports`,
 `types` and `bin` point at the compiled files instead of the sources. The rules
 live in `scripts/manifest.ts`, which both scripts share.
 
@@ -174,9 +175,10 @@ dropped from both published manifests; it is a staging directive, not something
 an install should see.
 
 Both names go up in the same release, one after the other, with the same
-dist-tag and provenance. Adding a third name is one line in that array plus a
-trusted publisher on npmjs.com for the new name — the first release of an alias
-has to be published by hand, exactly like the first release of the scoped one.
+dist-tag and provenance. Adding a third name is one line in that array: the token
+publishes any package the account can publish, so nothing on npmjs.com has to be
+set up first. Once the secret is gone in favour of trusted publishing, a new name
+does need its own trusted publisher, because that is all npm will accept.
 
 ### Versions
 
@@ -196,9 +198,10 @@ Installing, staging and testing are Yarn, named by `packageManager` and run
 through corepack. Publishing stays with the npm CLI, because that is the client
 the registry speaks:
 
-- trusted publishing and `--provenance` are npm-CLI features. `yarn npm publish`
-  speaks the same OIDC flow on GitHub Actions, but it publishes the active
-  *workspace*, and a release here is a directory of staged packages;
+- `--provenance` is an npm-CLI feature, and the attestation is signed with the
+  OIDC token the job asks for. `yarn npm publish` speaks the same flow on GitHub
+  Actions, but it publishes the active *workspace*, and a release here is a
+  directory of staged packages;
 - `yarn npm pack` is not a substitute for `npm pack --dry-run` in the tests:
   the npm CLI is what builds the published tarball, so its file list is the one
   that matters;
@@ -259,6 +262,31 @@ Provenance is the reason this is on GitHub Actions rather than anywhere else: an
 attestation is signed with an OIDC token the workflow asks for, and records the
 repository, workflow and commit the tarball came from. CircleCI cannot mint one.
 
+### The publish token
+
+`npm publish` authenticates with the `NPM_PUBLISH` repository secret: a granular
+npm token with permission to publish these packages and 2FA bypass enabled — a
+token without that waits for a one-time password no runner can type, and the
+release stops on the first upload. A granular token can also create a package that
+does not exist yet, which is why the first release needs no manual step.
+
+`actions/setup-node` writes the `.npmrc` that reads the value out of
+`NODE_AUTH_TOKEN`, so the secret is never written to a file on the runner or
+printed in a log. Both publishing jobs check it is there, and that `npm whoami`
+answers with it, before they build anything — a wrong or expired token costs
+seconds instead of a release run.
+
+Trusted publishing is where this has to end up. npm gives a configured trusted
+publisher precedence over `NODE_AUTH_TOKEN`, so the two coexist: add a trusted
+publisher on npmjs.com to however many packages you have done (this repository,
+workflow file `release.yml`, no environment), and delete the secret once all
+eleven have one. Nothing in the workflow changes when you do — it already asks for
+`id-token: write`, and the npm 11.5.1 the provenance check insists on is the same
+version trusted publishing needs. That matters because from January 2027 npm stops
+accepting a direct publish from a 2FA-bypass token: without trusted publishers,
+the release would have to move to a stage-only token and `npm stage publish`, with
+a person approving each staged package in the npm UI.
+
 ## Why the code packages are compiled at publish time
 
 The code packages ship JavaScript, because Node refuses to strip types for
@@ -280,9 +308,9 @@ avoiding, so the compilation happens on the way out instead. Two files hold the
 line, and both stage into a temporary directory the way CI does:
 
 - `packages/test/src/packaging.test.ts` checks the staged shape (JavaScript and
-  declarations, no sources, no tests, assets copied, manifest rewritten,
-  versions pinned) and then imports the staged packages from a real
-  `node_modules` copy, which is the case that used to fail. It ends by packing
+  declarations, no sources, no tests, assets copied, readme and licence copied,
+  manifest rewritten, versions pinned) and then imports the staged packages from a
+  real `node_modules` copy, which is the case that used to fail. It ends by packing
   every package, `npm install`ing the tarballs into a scratch directory and
   running the cli from there — `--version`, a line of Luau, and `microstudio
   test` on a project — which is the one test that fails if an install does not
