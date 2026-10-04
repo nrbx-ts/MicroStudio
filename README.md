@@ -99,7 +99,7 @@ node packages/cli/src/index.ts                 # a prompt, on a fresh world
 ```
 
 ```text
-MicroStudio 1.1.0 — Luau 0.740 — :help for commands
+MicroStudio 1.1.1 — Luau 0.740 — :help for commands
 > workspace
 Instance<Workspace> Workspace
 > Instance.new("Part").Size

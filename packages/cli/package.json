@@ -1,6 +1,6 @@
 {
   "name": "@microstudio/cli",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "The MicroStudio command line: dev, test and repl.",
   "license": "MIT",
   "repository": {

@@ -122,7 +122,7 @@ test("a BOM does not stop a script from running", async () => {
 
 test("prompts when given nothing to run", async () => {
   const result = await run([], "print('from the prompt')\n:quit\n");
-  assert.match(result.stdout, /MicroStudio 1\.1\.0 — Luau \d+\.\d+ — :help for commands/);
+  assert.match(result.stdout, /MicroStudio 1\.1\.1 — Luau \d+\.\d+ — :help for commands/);
   assert.match(result.stdout, /from the prompt/);
   assert.equal(result.code, 0);
 });
