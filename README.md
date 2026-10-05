@@ -561,6 +561,10 @@ publish from a 2FA-bypass token.
 [docs/publishing.md](docs/publishing.md) has the rest, and the comment at the top
 of `release.yml` lists the setup steps.
 
+## Notice
+
+This program is written with assistance of Artificial Intelligence (superintelligence if you're american), and is documented (mostly) by AI.
+
 <hr />
 
 <div align="center" id="top">
